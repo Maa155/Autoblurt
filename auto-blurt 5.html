@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto-Blurt — Recall Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --bg2: #161616;
+    --bg3: #1e1e1e;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0ede6;
+    --muted: #888;
+    --accent: #c8f07a;
+    --accent-dark: #8ab840;
+    --red: #f07a7a;
+    --amber: #f0c27a;
+    --radius: 12px;
+    --radius-sm: 7px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+
+  .page { position: relative; z-index: 1; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.5rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.4rem; letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); font-style: italic; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  .logo-tag {
+    font-size: 10px; font-weight: 400; color: var(--muted);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    border: 1px solid var(--border2); border-radius: 20px;
+    padding: 3px 10px;
+  }
+
+  /* ── API KEY MODAL ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.75);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem;
+    backdrop-filter: blur(4px);
+  }
+  .modal-backdrop.hidden { display: none; }
+
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 2rem;
+    max-width: 480px; width: 100%;
+    animation: fadeUp 0.3s ease both;
+  }
+
+  .modal-eyebrow {
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 0.75rem;
+  }
+
+  .modal-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.6rem; color: var(--text);
+    margin-bottom: 0.75rem; line-height: 1.2;
+  }
+
+  .modal-desc {
+    font-size: 12px; color: var(--muted); line-height: 1.8;
+    margin-bottom: 1.5rem;
+  }
+  .modal-desc a { color: var(--accent); text-decoration: none; }
+  .modal-desc a:hover { text-decoration: underline; }
+
+  .api-input-wrap { position: relative; margin-bottom: 1rem; }
+
+  .api-input-wrap input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 0.875rem 3rem 0.875rem 1rem;
+    transition: border-color 0.2s;
+    letter-spacing: 0.04em;
+  }
+  .api-input-wrap input:focus { outline: none; border-color: var(--border2); }
+  .api-input-wrap input::placeholder { color: var(--muted); letter-spacing: 0; }
+
+  .toggle-key-btn {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 11px; font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em; transition: color 0.15s;
+  }
+  .toggle-key-btn:hover { color: var(--text); }
+
+  .modal-note {
+    font-size: 11px; color: var(--muted); line-height: 1.7;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .modal-note strong { color: var(--text); }
+
+  .key-status {
+    font-size: 11px; margin-bottom: 1rem; padding: 8px 12px;
+    border-radius: var(--radius-sm); display: none;
+  }
+  .key-status.success {
+    background: rgba(200,240,122,0.1);
+    border: 1px solid rgba(200,240,122,0.25);
+    color: var(--accent); display: block;
+  }
+  .key-status.error {
+    background: rgba(240,122,122,0.1);
+    border: 1px solid rgba(240,122,122,0.25);
+    color: var(--red); display: block;
+  }
+
+  /* ── API KEY INDICATOR in header ── */
+  .key-indicator {
+    font-size: 10px; letter-spacing: 0.08em;
+    padding: 4px 10px; border-radius: 20px; cursor: pointer;
+    transition: opacity 0.15s;
+    border: 1px solid;
+  }
+  .key-indicator:hover { opacity: 0.75; }
+  .key-indicator.set {
+    color: var(--accent);
+    border-color: rgba(200,240,122,0.3);
+    background: rgba(200,240,122,0.08);
+  }
+  .key-indicator.unset {
+    color: var(--red);
+    border-color: rgba(240,122,122,0.3);
+    background: rgba(240,122,122,0.08);
+  }
+
+  /* ── HERO ── */
+  .hero {
+    text-align: center;
+    padding: 5rem 2rem 3.5rem;
+    animation: fadeUp 0.6s ease both;
+  }
+  .hero-eyebrow {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 1.25rem;
+  }
+  .hero-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    line-height: 1.08; letter-spacing: -0.02em;
+    color: var(--text); margin-bottom: 1.25rem;
+  }
+  .hero-title em { font-style: italic; color: var(--accent); }
+  .hero-sub {
+    font-size: 13px; color: var(--muted); line-height: 1.8;
+    max-width: 420px; margin: 0 auto;
+  }
+
+  /* ── MAIN CARD ── */
+  .app-shell {
+    max-width: 720px; margin: 0 auto;
+    padding: 0 1.5rem 5rem;
+    animation: fadeUp 0.6s 0.15s ease both;
+  }
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  /* ── STEP BAR ── */
+  .step-bar { display: flex; border-bottom: 1px solid var(--border); }
+  .step-item {
+    flex: 1; padding: 1rem 0.75rem;
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); text-align: center; position: relative;
+    transition: color 0.3s;
+  }
+  .step-item.active { color: var(--accent); }
+  .step-item.done { color: var(--muted); }
+  .step-item.active::after {
+    content: '';
+    position: absolute; bottom: -1px; left: 0; right: 0; height: 2px;
+    background: var(--accent);
+  }
+  .step-num {
+    display: flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    border-radius: 50%; border: 1px solid currentColor;
+    font-size: 9px; margin: 0 auto 5px;
+  }
+  .step-item.done .step-num {
+    background: rgba(200,240,122,0.15);
+    border-color: rgba(200,240,122,0.3);
+  }
+  .step-item.done .step-num::after { content: '✓'; font-size: 9px; color: var(--accent); }
+  .step-item.done .step-num span { display: none; }
+
+  /* ── PHASES ── */
+  .phase { display: none; padding: 2rem; }
+  .phase.active { display: block; animation: fadeUp 0.3s ease both; }
+  .phase-label {
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 1.25rem;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .phase-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  textarea {
+    width: 100%; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-family: 'DM Mono', monospace;
+    font-size: 13.5px; line-height: 1.75; padding: 1rem 1.125rem;
+    resize: vertical; min-height: 160px;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { outline: none; border-color: var(--border2); }
+  textarea::placeholder { color: var(--muted); }
+
+  .controls-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem; margin: 1.25rem 0;
+  }
+  @media (max-width: 520px) { .controls-grid { grid-template-columns: 1fr; } }
+
+  .control-box {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 1rem 1.125rem;
+  }
+  .control-box label {
+    display: block; font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem;
+  }
+
+  .time-input-row { display: flex; align-items: center; gap: 6px; }
+  .time-input-row input[type=text] {
+    width: 52px; background: var(--bg2);
+    border: 1px solid var(--border2); border-radius: var(--radius-sm);
+    color: var(--accent); font-family: 'DM Mono', monospace;
+    font-size: 1.1rem; font-weight: 500; letter-spacing: 0.05em;
+    padding: 6px 8px; text-align: center;
+    transition: border-color 0.2s;
+    min-height: 0;
+  }
+  .time-input-row input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .time-input-row input[type=text].invalid { border-color: var(--red); color: var(--red); }
+  .time-sep { color: var(--muted); font-size: 1.1rem; font-weight: 500; line-height: 1; }
+  .time-hint { font-size: 10px; color: var(--muted); margin-top: 6px; letter-spacing: 0.04em; }
+
+  /* ── DROP ZONE ── */
+  .drop-zone {
+    position: relative;
+  }
+  .drop-zone textarea {
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-zone.dragover textarea {
+    border-color: var(--accent);
+    background: rgba(200,240,122,0.05);
+  }
+  .drop-hint {
+    position: absolute; bottom: 10px; right: 12px;
+    font-size: 10px; color: var(--muted); letter-spacing: 0.08em;
+    pointer-events: none; opacity: 0.7;
+  }
+  .file-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--accent);
+    background: rgba(200,240,122,0.08); border: 1px solid rgba(200,240,122,0.2);
+    border-radius: 20px; padding: 4px 10px; margin-bottom: 8px;
+  }
+  .file-badge button {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 12px; padding: 0; line-height: 1;
+    transition: color 0.15s;
+  }
+  .file-badge button:hover { color: var(--red); }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 0.25rem; flex-wrap: wrap; }
+
+  .btn-primary {
+    background: var(--accent); color: #0e0e0e;
+    border: none; border-radius: var(--radius-sm);
+    padding: 11px 22px; font-family: 'DM Mono', monospace;
+    font-size: 12px; letter-spacing: 0.05em; font-weight: 500;
+    cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-primary:active { transform: scale(0.97); }
+
+  .btn-ghost {
+    background: transparent; border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); padding: 11px 22px;
+    font-family: 'DM Mono', monospace; font-size: 12px;
+    letter-spacing: 0.05em; color: var(--muted); cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+
+  .study-display {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 1.75rem;
+    min-height: 150px; position: relative; margin-bottom: 1.25rem;
+    overflow: hidden;
+  }
+  .study-content {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.15rem; line-height: 1.75; color: var(--text);
+  }
+  .hidden-overlay {
+    position: absolute; inset: 0; background: var(--bg3);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); transition: opacity 0.3s;
+  }
+  .hidden-overlay .hid-label {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 20px;
+  }
+
+  .timer-wrap { margin-bottom: 1.25rem; }
+  .timer-meta {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--muted); margin-bottom: 6px;
+  }
+  .timer-track { height: 3px; background: var(--border2); border-radius: 2px; overflow: hidden; }
+  .timer-fill {
+    height: 100%; background: var(--accent); border-radius: 2px;
+    transition: width 0.25s linear; width: 100%;
+  }
+  .timer-fill.danger { background: var(--red); }
+
+  .results-header {
+    display: flex; align-items: baseline; gap: 1rem;
+    margin-bottom: 1.5rem; flex-wrap: wrap;
+  }
+  .score-big {
+    font-family: 'Instrument Serif', serif;
+    font-size: 3.5rem; line-height: 1; color: var(--accent);
+  }
+  .score-label { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .diff-section { margin-bottom: 1.5rem; }
+  .diff-section-label {
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 0.6rem;
+  }
+  .diff-box {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 1.125rem 1.25rem;
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.05rem; line-height: 1.85;
+  }
+
+  .hit { background: rgba(200,240,122,0.18); color: #c8f07a; border-radius: 3px; padding: 1px 4px; }
+  .miss { background: rgba(240,122,122,0.18); color: #f07a7a; border-radius: 3px; padding: 1px 4px; text-decoration: line-through; }
+  .extra { background: rgba(240,194,122,0.18); color: #f0c27a; border-radius: 3px; padding: 1px 4px; }
+
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; margin-bottom: 1.25rem; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .leg-dot { width: 8px; height: 8px; border-radius: 2px; }
+  .leg-green { background: rgba(200,240,122,0.5); }
+  .leg-red { background: rgba(240,122,122,0.5); }
+  .leg-amber { background: rgba(240,194,122,0.5); }
+  .legend span { color: var(--muted); }
+
+  .feedback-box {
+    background: rgba(200,240,122,0.05); border: 1px solid rgba(200,240,122,0.15);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm); padding: 1rem 1.125rem;
+    font-size: 13px; line-height: 1.75; color: #d4d0c8;
+    margin-top: 0.25rem;
+  }
+
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .stat-pill { font-size: 11px; padding: 5px 12px; border-radius: 20px; font-weight: 500; letter-spacing: 0.03em; }
+  .stat-green { background: rgba(200,240,122,0.15); color: var(--accent); border: 1px solid rgba(200,240,122,0.25); }
+  .stat-red { background: rgba(240,122,122,0.12); color: var(--red); border: 1px solid rgba(240,122,122,0.22); }
+  .stat-amber { background: rgba(240,194,122,0.12); color: var(--amber); border: 1px solid rgba(240,194,122,0.22); }
+
+  .loading-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 2rem 0; color: var(--muted); font-size: 13px;
+  }
+  .spin {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--border2); border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 2.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: var(--muted); letter-spacing: 0.05em;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── API KEY MODAL ── -->
+  <div class="modal-backdrop" id="api-modal">
+    <div class="modal">
+      <div class="modal-eyebrow">Setup</div>
+      <div class="modal-title">Enter your API key</div>
+      <div class="modal-desc">
+        AutoBlurt uses the Anthropic API to score your recall. Get a key at
+        <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
+        Your key is stored only in your browser's local storage — it never leaves your device.
+      </div>
+
+      <div class="api-input-wrap">
+        <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off" spellcheck="false">
+        <button class="toggle-key-btn" id="toggle-key-vis">show</button>
+      </div>
+
+      <div class="modal-note">
+        <strong>Privacy:</strong> your key is saved in <code>localStorage</code> on this device only.
+        It is sent directly from your browser to Anthropic — not through any third-party server.
+        To remove it, click "API Key" in the header and clear it.
+      </div>
+
+      <div class="key-status" id="key-status"></div>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="save-key-btn">Save key &amp; start</button>
+        <button class="btn-ghost" id="skip-key-btn">Skip (no AI scoring)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo">Auto<span>Blurt</span></div>
+    <div class="header-right">
+      <button class="key-indicator unset" id="key-indicator" onclick="openApiModal()">⚠ No API key</button>
+      <div class="logo-tag">Recall Trainer</div>
+    </div>
+  </header>
+
+  <!-- ── HERO ── -->
+  <div class="hero">
+    <div class="hero-eyebrow">Active recall · spaced repetition</div>
+    <h1 class="hero-title">Study it.<br><em>Blurt</em> it back.</h1>
+    <p class="hero-sub">Paste your notes, memorise them under a timer, write everything you remember — AI marks what you got right.</p>
+  </div>
+
+  <!-- ── APP ── -->
+  <div class="app-shell">
+    <div class="card">
+
+      <div class="step-bar">
+        <div class="step-item active" id="step1"><div class="step-num"><span>1</span></div>Input</div>
+        <div class="step-item" id="step2"><div class="step-num"><span>2</span></div>Study</div>
+        <div class="step-item" id="step3"><div class="step-num"><span>3</span></div>Blurt</div>
+        <div class="step-item" id="step4"><div class="step-num"><span>4</span></div>Results</div>
+      </div>
+
+      <!-- Phase 1: Input -->
+      <div class="phase active" id="phase1">
+        <div class="phase-label">Your text</div>
+        <div id="file-badge-wrap"></div>
+        <div class="drop-zone" id="drop-zone">
+          <textarea id="source-text" placeholder="Paste your notes, definitions, key facts, essay points — or load a file below..."></textarea>
+          <span class="drop-hint">or drop file here</span>
+        </div>
+        <input type="file" id="file-input" accept=".txt,.md,.pdf" style="display:none">
+        <div style="margin-top:0.6rem;">
+          <button class="btn-ghost" onclick="document.getElementById('file-input').click()">📄 Load from file</button>
+        </div>
+        <div class="controls-grid">
+          <div class="control-box">
+            <label>Study time</label>
+            <div class="time-input-row">
+              <input type="text" id="show-min" value="0" maxlength="2" placeholder="0">
+              <span class="time-sep">:</span>
+              <input type="text" id="show-sec" value="30" maxlength="2" placeholder="30">
+            </div>
+            <div class="time-hint">MM : SS — how long to read</div>
+          </div>
+          <div class="control-box">
+            <label>Blurt time</label>
+            <div class="time-input-row">
+              <input type="text" id="blurt-min" value="2" maxlength="2" placeholder="2">
+              <span class="time-sep">:</span>
+              <input type="text" id="blurt-sec" value="00" maxlength="2" placeholder="00">
+            </div>
+            <div class="time-hint">MM : SS — how long to recall</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary" id="start-btn">Begin session &rarr;</button>
+        </div>
+      </div>
+
+      <!-- Phase 2: Study -->
+      <div class="phase" id="phase2">
+        <div class="phase-label">Memorise this</div>
+        <div class="study-display">
+          <div class="study-content" id="display-text"></div>
+        </div>
+        <div class="timer-wrap">
+          <div class="timer-meta">
+            <span id="study-phase-label">Showing text</span>
+            <span id="study-time-left"></span>
+          </div>
+          <div class="timer-track"><div class="timer-fill" id="study-bar"></div></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-ghost" id="hide-now-btn">Hide now &mdash; I&apos;m ready</button>
+        </div>
+      </div>
+
+      <!-- Phase 3: Blurt -->
+      <div class="phase" id="phase3">
+        <div class="phase-label">Recall</div>
+        <div class="study-display">
+          <div class="study-content" id="reveal-text" style="display:none;"></div>
+          <div class="hidden-overlay" id="hidden-over">
+            <span class="hid-label">Text hidden — recall from memory</span>
+          </div>
+        </div>
+        <textarea id="blurt-area" placeholder="Write everything you remember — don't worry about word-for-word accuracy..."></textarea>
+        <div class="timer-wrap" style="margin-top:1rem;">
+          <div class="timer-meta">
+            <span id="blurt-phase-label">Blurting</span>
+            <span id="blurt-time-left"></span>
+          </div>
+          <div class="timer-track"><div class="timer-fill" id="blurt-bar"></div></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary" id="submit-btn">Submit &rarr;</button>
+          <button class="btn-ghost" id="reveal-btn">Reveal text</button>
+        </div>
+      </div>
+
+      <!-- Phase 4: Results -->
+      <div class="phase" id="phase4">
+        <div id="results-area">
+          <div class="loading-row"><div class="spin"></div> Comparing your recall with the original...</div>
+        </div>
+        <div class="btn-row" id="result-btns" style="display:none;">
+          <button class="btn-primary" id="retry-btn">Try again</button>
+          <button class="btn-ghost" id="new-btn">New text</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    <span>AutoBlurt</span>
+    <span>Powered by Claude · Active recall training</span>
+  </footer>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ── API KEY MANAGEMENT ──
+const KEY_STORAGE = 'autoblurt_api_key';
+
+function getApiKey() { return localStorage.getItem(KEY_STORAGE) || ''; }
+
+function setApiKey(key) {
+  if (key) localStorage.setItem(KEY_STORAGE, key);
+  else localStorage.removeItem(KEY_STORAGE);
+  updateKeyIndicator();
+}
+
+function updateKeyIndicator() {
+  const key = getApiKey();
+  const ind = $('key-indicator');
+  if (key) {
+    ind.textContent = '✓ API key set';
+    ind.className = 'key-indicator set';
+  } else {
+    ind.textContent = '⚠ No API key';
+    ind.className = 'key-indicator unset';
+  }
+}
+
+function openApiModal() {
+  $('api-modal').classList.remove('hidden');
+  const existing = getApiKey();
+  if (existing) $('api-key-input').value = existing;
+  $('key-status').className = 'key-status';
+  $('key-status').textContent = '';
+}
+
+// Show modal on load if no key saved
+window.addEventListener('DOMContentLoaded', () => {
+  updateKeyIndicator();
+  if (!getApiKey()) {
+    $('api-modal').classList.remove('hidden');
+  } else {
+    $('api-modal').classList.add('hidden');
+  }
+});
+
+$('toggle-key-vis').onclick = function() {
+  const inp = $('api-key-input');
+  if (inp.type === 'password') { inp.type = 'text'; this.textContent = 'hide'; }
+  else { inp.type = 'password'; this.textContent = 'show'; }
+};
+
+$('save-key-btn').onclick = () => {
+  const key = $('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    $('key-status').className = 'key-status error';
+    $('key-status').textContent = 'That doesn\'t look like a valid Anthropic key (should start with sk-ant-).';
+    return;
+  }
+  setApiKey(key);
+  $('key-status').className = 'key-status success';
+  $('key-status').textContent = 'Key saved! Closing...';
+  setTimeout(() => $('api-modal').classList.add('hidden'), 800);
+};
+
+$('skip-key-btn').onclick = () => {
+  $('api-modal').classList.add('hidden');
+};
+
+// Close modal on backdrop click
+$('api-modal').onclick = function(e) {
+  if (e.target === this) this.classList.add('hidden');
+};
+
+// ── APP LOGIC ──
+let sourceText = '', showSecs = 30, blurtSecs = 120;
+let studyTimer = null, blurtTimer = null;
+let studyRemaining, blurtRemaining;
+
+function fmtTime(s) {
+  if (s < 60) return s + 's';
+  return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+}
+
+function parseTimeInputs(minId, secId) {
+  const m = parseInt($(minId).value) || 0;
+  const s = parseInt($(secId).value) || 0;
+  return Math.max(1, m * 60 + s);
+}
+
+function padSec(el) {
+  const v = parseInt(el.value);
+  if (!isNaN(v)) el.value = String(Math.min(59, Math.max(0, v))).padStart(2, '0');
+}
+
+['show-sec','blurt-sec'].forEach(id => {
+  $(id).addEventListener('blur', () => padSec($(id)));
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') padSec($(id)); });
+});
+
+['show-min','blurt-min'].forEach(id => {
+  $(id).addEventListener('blur', () => {
+    const v = parseInt($(id).value);
+    if (!isNaN(v)) $(id).value = String(Math.max(0, v));
+  });
+});
+
+// ── PDF.js ──
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+let pdfjsLib = null;
+
+function loadPdfJs(cb) {
+  if (pdfjsLib) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = PDFJS_URL;
+  s.onload = () => {
+    pdfjsLib = window['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    cb();
+  };
+  document.head.appendChild(s);
+}
+
+// ── FILE DROP & INPUT ──
+const dropZone = $('drop-zone');
+const fileInput = $('file-input');
+
+function showBadge(name) {
+  $('file-badge-wrap').innerHTML = `
+    <div class="file-badge">
+      📄 ${name}
+      <button onclick="clearFile()" title="Remove file">✕</button>
+    </div>`;
+}
+
+function showFileError(msg) {
+  $('file-badge-wrap').innerHTML = `<div class="file-badge" style="color:var(--red);border-color:rgba(240,122,122,0.3)">⚠ ${msg}</div>`;
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const name = file.name;
+  const ext = name.split('.').pop().toLowerCase();
+
+  if (ext === 'pdf') {
+    $('file-badge-wrap').innerHTML = `<div class="file-badge">⏳ Reading PDF...</div>`;
+    loadPdfJs(async () => {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        const cleaned = fullText.replace(/\s+/g, ' ').trim();
+        if (cleaned.length > 20) {
+          $('source-text').value = cleaned;
+          showBadge(name);
+        } else {
+          showFileError("Couldn't extract text — this PDF may be scanned. Try copying and pasting instead.");
+        }
+      } catch(e) {
+        showFileError('Failed to read PDF. Try copying and pasting the text instead.');
+      }
+    });
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => {
+      $('source-text').value = e.target.result;
+      showBadge(name);
+    };
+    reader.readAsText(file);
+  }
+}
+
+window.clearFile = () => {
+  $('source-text').value = '';
+  $('file-badge-wrap').innerHTML = '';
+  fileInput.value = '';
+};
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = $('step'+i);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  }
+  document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+  $('phase'+n).classList.add('active');
+}
+
+$('start-btn').onclick = () => {
+  sourceText = $('source-text').value.trim();
+  if (!sourceText) { $('source-text').focus(); return; }
+  showSecs = parseTimeInputs('show-min', 'show-sec');
+  blurtSecs = parseTimeInputs('blurt-min', 'blurt-sec');
+  $('display-text').textContent = sourceText;
+  setStep(2);
+  startStudy();
+};
+
+function startStudy() {
+  studyRemaining = showSecs;
+  const total = showSecs;
+  $('study-bar').style.width = '100%';
+  $('study-bar').classList.remove('danger');
+  $('study-time-left').textContent = fmtTime(studyRemaining);
+  studyTimer = setInterval(() => {
+    studyRemaining--;
+    $('study-bar').style.width = (studyRemaining / total * 100) + '%';
+    $('study-time-left').textContent = fmtTime(Math.max(0, studyRemaining));
+    if (studyRemaining <= 3) $('study-bar').classList.add('danger');
+    if (studyRemaining <= 0) { clearInterval(studyTimer); goBlurt(); }
+  }, 1000);
+}
+
+$('hide-now-btn').onclick = () => { clearInterval(studyTimer); goBlurt(); };
+
+function goBlurt() {
+  $('blurt-area').value = '';
+  $('reveal-text').textContent = sourceText;
+  $('reveal-text').style.display = 'none';
+  $('hidden-over').style.display = 'flex';
+  $('reveal-btn').textContent = 'Reveal text';
+  $('blurt-bar').classList.remove('danger');
+  setStep(3);
+  blurtRemaining = blurtSecs;
+  const total = blurtSecs;
+  $('blurt-bar').style.width = '100%';
+  $('blurt-time-left').textContent = fmtTime(blurtRemaining);
+  blurtTimer = setInterval(() => {
+    blurtRemaining--;
+    $('blurt-bar').style.width = (blurtRemaining / total * 100) + '%';
+    $('blurt-time-left').textContent = fmtTime(Math.max(0, blurtRemaining));
+    if (blurtRemaining <= 15) $('blurt-bar').classList.add('danger');
+    if (blurtRemaining <= 0) { clearInterval(blurtTimer); $('blurt-phase-label').textContent = "Time's up!"; submitBlurt(); }
+  }, 1000);
+}
+
+$('reveal-btn').onclick = function() {
+  const ov = $('hidden-over');
+  const rt = $('reveal-text');
+  if (ov.style.display !== 'none') {
+    ov.style.display = 'none'; rt.style.display = 'block'; this.textContent = 'Hide text';
+  } else {
+    ov.style.display = 'flex'; rt.style.display = 'none'; this.textContent = 'Reveal text';
+  }
+};
+
+$('submit-btn').onclick = () => { clearInterval(blurtTimer); submitBlurt(); };
+
+async function submitBlurt() {
+  const blurt = $('blurt-area').value.trim();
+  setStep(4);
+  $('result-btns').style.display = 'none';
+  $('results-area').innerHTML = '<div class="loading-row"><div class="spin"></div> Comparing your recall with the original...</div>';
+
+  const apiKey = getApiKey();
+  if (!apiKey) { renderFallback(blurt, true); $('result-btns').style.display = 'flex'; return; }
+
+  const prompt = `You are a recall-checking assistant for a student using active recall study techniques. Compare the student's RECALL against the ORIGINAL text.
+
+ORIGINAL:
+${sourceText}
+
+STUDENT'S RECALL:
+${blurt || '(nothing written)'}
+
+Return ONLY valid JSON (no markdown, no backticks), structured as:
+{
+  "score": <integer 0-100>,
+  "key_points_total": <int>,
+  "key_points_recalled": <int>,
+  "original_annotated": "<original text — wrap each key word/phrase with <HIT>word</HIT> if student recalled it, <MISS>word</MISS> if missed. Leave filler words/articles unannotated.>",
+  "recall_annotated": "<student recall — wrap with <HIT>word</HIT> if it matches original meaning, <EXTRA>word</EXTRA> if they added something not in original>",
+  "feedback": "<2–3 sentences of specific, actionable feedback targeted at a student>"
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const raw = data.content.map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    renderResults(JSON.parse(clean), blurt);
+  } catch(e) {
+    renderFallback(blurt, false, e.message);
+  }
+  $('result-btns').style.display = 'flex';
+}
+
+function renderResults(d, blurt) {
+  const origHtml = (d.original_annotated || '')
+    .replace(/<HIT>(.*?)<\/HIT>/g, '<span class="hit">$1</span>')
+    .replace(/<MISS>(.*?)<\/MISS>/g, '<span class="miss">$1</span>');
+  const recallHtml = (d.recall_annotated || blurt || '')
+    .replace(/<HIT>(.*?)<\/HIT>/g, '<span class="hit">$1</span>')
+    .replace(/<EXTRA>(.*?)<\/EXTRA>/g, '<span class="extra">$1</span>');
+  const score = d.score || 0;
+  $('results-area').innerHTML = `
+    <div class="results-header">
+      <div class="score-big">${score}%</div>
+      <div>
+        <div style="font-size:1rem;font-family:'Instrument Serif',serif;color:var(--text);margin-bottom:4px;">
+          ${score >= 75 ? 'Strong recall' : score >= 50 ? 'Decent recall' : 'Keep practising'}
+        </div>
+        <div class="score-label">overall recall score</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <span class="stat-pill stat-green">${d.key_points_recalled || 0} / ${d.key_points_total || 0} key points</span>
+      ${score >= 75 ? '<span class="stat-pill stat-green">Good job</span>' : score >= 50 ? '<span class="stat-pill stat-amber">Keep going</span>' : '<span class="stat-pill stat-red">Needs work</span>'}
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="leg-dot leg-green"></div><span>Recalled</span></div>
+      <div class="legend-item"><div class="leg-dot leg-red"></div><span>Missed</span></div>
+      <div class="legend-item"><div class="leg-dot leg-amber"></div><span>Added (not in original)</span></div>
+    </div>
+    <div class="diff-section">
+      <div class="diff-section-label">Original — what you should have recalled</div>
+      <div class="diff-box">${origHtml || sourceText}</div>
+    </div>
+    ${blurt ? `<div class="diff-section">
+      <div class="diff-section-label">Your recall — annotated</div>
+      <div class="diff-box">${recallHtml}</div>
+    </div>` : ''}
+    <div class="diff-section">
+      <div class="diff-section-label">Feedback</div>
+      <div class="feedback-box">${d.feedback || 'Keep practising — active recall is the most effective study technique.'}</div>
+    </div>
+  `;
+}
+
+function renderFallback(blurt, noKey = false, errMsg = '') {
+  const msg = noKey
+    ? 'No API key set — <button onclick="openApiModal()" style="background:none;border:none;color:var(--accent);font-family:\'DM Mono\',monospace;font-size:13px;cursor:pointer;padding:0;text-decoration:underline;">add one</button> to enable AI scoring.'
+    : `AI comparison unavailable${errMsg ? ' — ' + errMsg : ''}. Compare manually below.`;
+  $('results-area').innerHTML = `
+    <div class="feedback-box" style="margin-bottom:1.5rem;">${msg}</div>
+    <div class="diff-section">
+      <div class="diff-section-label">Original</div>
+      <div class="diff-box">${sourceText}</div>
+    </div>
+    ${blurt ? `<div class="diff-section">
+      <div class="diff-section-label">Your recall</div>
+      <div class="diff-box">${blurt}</div>
+    </div>` : ''}
+  `;
+}
+
+$('retry-btn').onclick = () => { clearInterval(blurtTimer); goBlurt(); };
+$('new-btn').onclick = () => {
+  clearInterval(studyTimer); clearInterval(blurtTimer);
+  $('source-text').value = ''; setStep(1);
+};
+</script>
+</body>
+</html>
